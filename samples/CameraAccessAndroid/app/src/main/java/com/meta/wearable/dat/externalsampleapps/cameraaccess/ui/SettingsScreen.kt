@@ -44,37 +44,31 @@ fun SettingsScreen(
 ) {
     var geminiAPIKey by remember { mutableStateOf(SettingsManager.geminiAPIKey) }
     var systemPrompt by remember { mutableStateOf(SettingsManager.geminiSystemPrompt) }
-    var openClawHost by remember { mutableStateOf(SettingsManager.openClawHost) }
-    var openClawPort by remember { mutableStateOf(SettingsManager.openClawPort.toString()) }
-    var openClawHookToken by remember { mutableStateOf(SettingsManager.openClawHookToken) }
-    var openClawGatewayToken by remember { mutableStateOf(SettingsManager.openClawGatewayToken) }
+    var claudeCodeHost by remember { mutableStateOf(SettingsManager.claudeCodeHost) }
+    var claudeCodePort by remember { mutableStateOf(SettingsManager.claudeCodePort.toString()) }
+    var claudeCodeToken by remember { mutableStateOf(SettingsManager.claudeCodeToken) }
     var webrtcSignalingURL by remember { mutableStateOf(SettingsManager.webrtcSignalingURL) }
     var videoStreamingEnabled by remember { mutableStateOf(SettingsManager.videoStreamingEnabled) }
-    var proactiveNotificationsEnabled by remember { mutableStateOf(SettingsManager.proactiveNotificationsEnabled) }
     var showResetDialog by remember { mutableStateOf(false) }
 
     fun save() {
         SettingsManager.geminiAPIKey = geminiAPIKey.trim()
         SettingsManager.geminiSystemPrompt = systemPrompt.trim()
-        SettingsManager.openClawHost = openClawHost.trim()
-        openClawPort.trim().toIntOrNull()?.let { SettingsManager.openClawPort = it }
-        SettingsManager.openClawHookToken = openClawHookToken.trim()
-        SettingsManager.openClawGatewayToken = openClawGatewayToken.trim()
+        SettingsManager.claudeCodeHost = claudeCodeHost.trim()
+        claudeCodePort.trim().toIntOrNull()?.let { SettingsManager.claudeCodePort = it }
+        SettingsManager.claudeCodeToken = claudeCodeToken.trim()
         SettingsManager.webrtcSignalingURL = webrtcSignalingURL.trim()
         SettingsManager.videoStreamingEnabled = videoStreamingEnabled
-        SettingsManager.proactiveNotificationsEnabled = proactiveNotificationsEnabled
     }
 
     fun reload() {
         geminiAPIKey = SettingsManager.geminiAPIKey
         systemPrompt = SettingsManager.geminiSystemPrompt
-        openClawHost = SettingsManager.openClawHost
-        openClawPort = SettingsManager.openClawPort.toString()
-        openClawHookToken = SettingsManager.openClawHookToken
-        openClawGatewayToken = SettingsManager.openClawGatewayToken
+        claudeCodeHost = SettingsManager.claudeCodeHost
+        claudeCodePort = SettingsManager.claudeCodePort.toString()
+        claudeCodeToken = SettingsManager.claudeCodeToken
         webrtcSignalingURL = SettingsManager.webrtcSignalingURL
         videoStreamingEnabled = SettingsManager.videoStreamingEnabled
-        proactiveNotificationsEnabled = SettingsManager.proactiveNotificationsEnabled
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -116,33 +110,27 @@ fun SettingsScreen(
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
             )
 
-            // OpenClaw section
-            SectionHeader("OpenClaw")
+            // Claude Code Bridge section
+            SectionHeader("Claude Code Bridge")
             MonoTextField(
-                value = openClawHost,
-                onValueChange = { openClawHost = it },
+                value = claudeCodeHost,
+                onValueChange = { claudeCodeHost = it },
                 label = "Host",
                 placeholder = "http://your-mac.local",
                 keyboardType = KeyboardType.Uri,
             )
             MonoTextField(
-                value = openClawPort,
-                onValueChange = { openClawPort = it },
+                value = claudeCodePort,
+                onValueChange = { claudeCodePort = it },
                 label = "Port",
                 placeholder = "18789",
                 keyboardType = KeyboardType.Number,
             )
             MonoTextField(
-                value = openClawHookToken,
-                onValueChange = { openClawHookToken = it },
-                label = "Hook Token",
-                placeholder = "Hook token",
-            )
-            MonoTextField(
-                value = openClawGatewayToken,
-                onValueChange = { openClawGatewayToken = it },
-                label = "Gateway Token",
-                placeholder = "Gateway auth token",
+                value = claudeCodeToken,
+                onValueChange = { claudeCodeToken = it },
+                label = "Token",
+                placeholder = "Your CLAUDE_CODE_TOKEN value",
             )
 
             // WebRTC section
@@ -173,27 +161,6 @@ fun SettingsScreen(
                 Switch(
                     checked = videoStreamingEnabled,
                     onCheckedChange = { videoStreamingEnabled = it },
-                )
-            }
-
-            // Notifications
-            SectionHeader("Notifications")
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text("Proactive Notifications", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Receive updates from OpenClaw spoken through glasses.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = proactiveNotificationsEnabled,
-                    onCheckedChange = { proactiveNotificationsEnabled = it },
                 )
             }
 

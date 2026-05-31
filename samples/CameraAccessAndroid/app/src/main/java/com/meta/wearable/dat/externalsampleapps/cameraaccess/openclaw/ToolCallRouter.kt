@@ -9,7 +9,9 @@ import org.json.JSONObject
 
 class ToolCallRouter(
     private val bridge: OpenClawBridge,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    // Returns the latest camera frame as base64 JPEG, or null if unavailable
+    private val getLatestFrame: (() -> String?)? = null
 ) {
     companion object {
         private const val TAG = "ToolCallRouter"
@@ -28,12 +30,11 @@ class ToolCallRouter(
 
         Log.d(TAG, "Received: $callName (id: $callId) args: ${call.args}")
 
-        // Circuit breaker: stop sending tool calls after repeated failures
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             Log.d(TAG, "Circuit breaker open ($consecutiveFailures consecutive failures), rejecting $callId")
             val errorResult = ToolResult.Failure(
                 "Tool execution is temporarily unavailable after $consecutiveFailures consecutive failures. " +
-                "Please tell the user you cannot complete this action right now and suggest they check their OpenClaw gateway connection."
+                "Please tell the user you cannot complete this action right now and suggest they check their Claude bridge server."
             )
             sendResponse(buildToolResponse(callId, callName, errorResult))
             return
@@ -41,7 +42,10 @@ class ToolCallRouter(
 
         val job = scope.launch {
             val taskDesc = call.args["task"]?.toString() ?: call.args.toString()
-            val result = bridge.delegateTask(task = taskDesc, toolName = callName)
+            val frame = getLatestFrame?.invoke()
+            val images = if (frame != null) listOf(frame) else emptyList()
+
+            val result = bridge.chat(text = taskDesc, images = images, toolName = callName)
 
             if (!coroutineContext[Job]!!.isCancelled) {
                 Log.d(TAG, "Result for $callName (id: $callId): $result")
@@ -51,8 +55,7 @@ class ToolCallRouter(
                     is ToolResult.Failure -> consecutiveFailures++
                 }
 
-                val response = buildToolResponse(callId, callName, result)
-                sendResponse(response)
+                sendResponse(buildToolResponse(callId, callName, result))
             } else {
                 Log.d(TAG, "Task $callId was cancelled, skipping response")
             }

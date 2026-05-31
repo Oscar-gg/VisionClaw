@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.gemini.GeminiConnectionState
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.gemini.GeminiUiState
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.OpenClawConnectionState
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.AgentConnectionState
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.ToolCallStatus
 
 @Composable
@@ -47,7 +47,8 @@ fun GeminiOverlay(
         // Status bar
         GeminiStatusBar(
             connectionState = uiState.connectionState,
-            openClawState = uiState.openClawConnectionState,
+            agentState = uiState.agentConnectionState,
+            isMuted = uiState.isMuted,
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -78,7 +79,8 @@ fun GeminiOverlay(
 @Composable
 fun GeminiStatusBar(
     connectionState: GeminiConnectionState,
-    openClawState: OpenClawConnectionState,
+    agentState: AgentConnectionState,
+    isMuted: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -96,16 +98,20 @@ fun GeminiStatusBar(
             },
         )
 
-        if (openClawState !is OpenClawConnectionState.NotConfigured) {
+        if (agentState !is AgentConnectionState.NotConfigured) {
             StatusPill(
-                label = "OpenClaw",
-                color = when (openClawState) {
-                    is OpenClawConnectionState.Connected -> Color(0xFF4CAF50)
-                    is OpenClawConnectionState.Checking -> Color(0xFFFF9800)
-                    is OpenClawConnectionState.Unreachable -> Color(0xFFF44336)
-                    is OpenClawConnectionState.NotConfigured -> Color(0xFF9E9E9E)
+                label = "Claude",
+                color = when (agentState) {
+                    is AgentConnectionState.Connected -> Color(0xFF4CAF50)
+                    is AgentConnectionState.Checking -> Color(0xFFFF9800)
+                    is AgentConnectionState.Unreachable -> Color(0xFFF44336)
+                    is AgentConnectionState.NotConfigured -> Color(0xFF9E9E9E)
                 },
             )
+        }
+
+        if (isMuted) {
+            StatusPill(label = "🎙 MUTED", color = Color(0xFFF44336))
         }
     }
 }

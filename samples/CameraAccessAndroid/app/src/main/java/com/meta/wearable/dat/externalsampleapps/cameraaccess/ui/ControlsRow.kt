@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -28,6 +30,8 @@ fun ControlsRow(
     isAIActive: Boolean,
     onToggleLive: () -> Unit,
     isLiveActive: Boolean,
+    onToggleMute: () -> Unit = {},
+    isMuted: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -64,6 +68,25 @@ fun ControlsRow(
                 contentDescription = if (isAIActive) "Stop AI" else "Start AI",
                 tint = Color.White,
             )
+        }
+
+        // Mute toggle button (only shown when AI is active)
+        if (isAIActive) {
+            Button(
+                onClick = onToggleMute,
+                modifier = Modifier.aspectRatio(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isMuted) AppColor.Red else AppColor.DeepBlue,
+                ),
+                shape = CircleShape,
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Icon(
+                    imageVector = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                    contentDescription = if (isMuted) "Unmute" else "Mute",
+                    tint = Color.White,
+                )
+            }
         }
 
         // Live toggle button

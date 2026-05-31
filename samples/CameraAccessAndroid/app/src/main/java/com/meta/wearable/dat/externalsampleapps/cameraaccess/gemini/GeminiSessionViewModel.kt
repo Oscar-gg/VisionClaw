@@ -1,15 +1,15 @@
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.gemini
 
 import android.graphics.Bitmap
+import android.util.Base64
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.OpenClawBridge
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.OpenClawEventClient
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.settings.SettingsManager
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.OpenClawConnectionState
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.AgentConnectionState
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.ToolCallRouter
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.openclaw.ToolCallStatus
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.settings.SettingsManager
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.StreamingMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 
 data class GeminiUiState(
     val isGeminiActive: Boolean = false,
@@ -27,7 +28,8 @@ data class GeminiUiState(
     val userTranscript: String = "",
     val aiTranscript: String = "",
     val toolCallStatus: ToolCallStatus = ToolCallStatus.Idle,
-    val openClawConnectionState: OpenClawConnectionState = OpenClawConnectionState.NotConfigured,
+    val agentConnectionState: AgentConnectionState = AgentConnectionState.NotConfigured,
+    val isMuted: Boolean = false,
 )
 
 class GeminiSessionViewModel : ViewModel() {
@@ -39,12 +41,14 @@ class GeminiSessionViewModel : ViewModel() {
     val uiState: StateFlow<GeminiUiState> = _uiState.asStateFlow()
 
     private val geminiService = GeminiLiveService()
-    private val openClawBridge = OpenClawBridge()
+    private val bridge = OpenClawBridge()
     private var toolCallRouter: ToolCallRouter? = null
     private val audioManager = AudioManager()
-    private val eventClient = OpenClawEventClient()
     private var lastVideoFrameTime: Long = 0
     private var stateObservationJob: Job? = null
+
+    // Latest camera frame kept for attaching to Claude tool calls
+    @Volatile private var latestFrameBase64: String? = null
 
     var streamingMode: StreamingMode = StreamingMode.GLASSES
 
@@ -101,13 +105,13 @@ class GeminiSessionViewModel : ViewModel() {
             }
         }
 
-        // Check OpenClaw and start session
+        // Check Claude Code bridge and start session
         viewModelScope.launch {
-            openClawBridge.checkConnection()
-            openClawBridge.resetSession()
+            bridge.checkConnection()
+            bridge.resetSession()
 
-            // Wire tool call handling
-            toolCallRouter = ToolCallRouter(openClawBridge, viewModelScope)
+            // Wire tool call handling — pass the latest frame so Claude can see what triggered the action
+            toolCallRouter = ToolCallRouter(bridge, viewModelScope) { latestFrameBase64 }
 
             geminiService.onToolCall = { toolCall ->
                 for (call in toolCall.functionCalls) {
@@ -128,8 +132,8 @@ class GeminiSessionViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(
                         connectionState = geminiService.connectionState.value,
                         isModelSpeaking = geminiService.isModelSpeaking.value,
-                        toolCallStatus = openClawBridge.lastToolCallStatus.value,
-                        openClawConnectionState = openClawBridge.connectionState.value,
+                        toolCallStatus = bridge.lastToolCallStatus.value,
+                        agentConnectionState = bridge.connectionState.value,
                     )
                 }
             }
@@ -165,23 +169,11 @@ class GeminiSessionViewModel : ViewModel() {
                         connectionState = GeminiConnectionState.Disconnected
                     )
                 }
-
-                // Connect to OpenClaw event stream for proactive notifications
-                if (SettingsManager.proactiveNotificationsEnabled) {
-                    eventClient.onNotification = { text ->
-                        val state = _uiState.value
-                        if (state.isGeminiActive && state.connectionState == GeminiConnectionState.Ready) {
-                            geminiService.sendTextMessage(text)
-                        }
-                    }
-                    eventClient.connect()
-                }
             }
         }
     }
 
     fun stopSession() {
-        eventClient.disconnect()
         toolCallRouter?.cancelAll()
         toolCallRouter = null
         audioManager.stopCapture()
@@ -198,7 +190,23 @@ class GeminiSessionViewModel : ViewModel() {
         val now = System.currentTimeMillis()
         if (now - lastVideoFrameTime < GeminiConfig.VIDEO_FRAME_INTERVAL_MS) return
         lastVideoFrameTime = now
+
+        // Cache a compressed copy for Claude tool calls
+        latestFrameBase64 = bitmapToBase64(bitmap)
+
         geminiService.sendVideoFrame(bitmap)
+    }
+
+    private fun bitmapToBase64(bitmap: Bitmap): String {
+        val out = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, GeminiConfig.VIDEO_JPEG_QUALITY, out)
+        return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    fun toggleMute() {
+        val muted = !audioManager.isMuted
+        audioManager.isMuted = muted
+        _uiState.value = _uiState.value.copy(isMuted = muted)
     }
 
     fun clearError() {

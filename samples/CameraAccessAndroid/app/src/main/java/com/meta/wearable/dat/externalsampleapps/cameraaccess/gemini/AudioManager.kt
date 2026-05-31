@@ -17,6 +17,8 @@ class AudioManager {
 
     var onAudioCaptured: ((ByteArray) -> Unit)? = null
 
+    @Volatile var isMuted: Boolean = false
+
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
     private var captureThread: Thread? = null
@@ -90,7 +92,9 @@ class AudioManager {
                             if (tapCount <= 3) {
                                 Log.d(TAG, "Sending chunk: ${chunk.size} bytes (~${chunk.size / 32}ms)")
                             }
-                            onAudioCaptured?.invoke(chunk)
+                            if (!isMuted) {
+                                onAudioCaptured?.invoke(chunk)
+                            }
                         }
                     }
                 }

@@ -21,24 +21,20 @@ object SettingsManager {
         get() = prefs.getString("geminiSystemPrompt", null) ?: DEFAULT_SYSTEM_PROMPT
         set(value) = prefs.edit().putString("geminiSystemPrompt", value).apply()
 
-    var openClawHost: String
-        get() = prefs.getString("openClawHost", null) ?: Secrets.openClawHost
-        set(value) = prefs.edit().putString("openClawHost", value).apply()
+    var claudeCodeHost: String
+        get() = prefs.getString("claudeCodeHost", null) ?: Secrets.claudeCodeHost
+        set(value) = prefs.edit().putString("claudeCodeHost", value).apply()
 
-    var openClawPort: Int
+    var claudeCodePort: Int
         get() {
-            val stored = prefs.getInt("openClawPort", 0)
-            return if (stored != 0) stored else Secrets.openClawPort
+            val stored = prefs.getInt("claudeCodePort", 0)
+            return if (stored != 0) stored else Secrets.claudeCodePort
         }
-        set(value) = prefs.edit().putInt("openClawPort", value).apply()
+        set(value) = prefs.edit().putInt("claudeCodePort", value).apply()
 
-    var openClawHookToken: String
-        get() = prefs.getString("openClawHookToken", null) ?: Secrets.openClawHookToken
-        set(value) = prefs.edit().putString("openClawHookToken", value).apply()
-
-    var openClawGatewayToken: String
-        get() = prefs.getString("openClawGatewayToken", null) ?: Secrets.openClawGatewayToken
-        set(value) = prefs.edit().putString("openClawGatewayToken", value).apply()
+    var claudeCodeToken: String
+        get() = prefs.getString("claudeCodeToken", null) ?: Secrets.claudeCodeToken
+        set(value) = prefs.edit().putString("claudeCodeToken", value).apply()
 
     var webrtcSignalingURL: String
         get() = prefs.getString("webrtcSignalingURL", null) ?: Secrets.webrtcSignalingURL
@@ -48,10 +44,6 @@ object SettingsManager {
         get() = prefs.getBoolean("videoStreamingEnabled", true)
         set(value) = prefs.edit().putBoolean("videoStreamingEnabled", value).apply()
 
-    var proactiveNotificationsEnabled: Boolean
-        get() = prefs.getBoolean("proactiveNotificationsEnabled", true)
-        set(value) = prefs.edit().putBoolean("proactiveNotificationsEnabled", value).apply()
-
     fun resetAll() {
         prefs.edit().clear().apply()
     }
@@ -60,7 +52,7 @@ object SettingsManager {
 
 CRITICAL: You have NO memory, NO storage, and NO ability to take actions on your own. You cannot remember things, keep lists, set reminders, search the web, send messages, or do anything persistent. You are ONLY a voice interface.
 
-You have exactly ONE tool: execute. This connects you to a powerful personal assistant that can do anything -- send messages, search the web, manage lists, set reminders, create notes, research topics, control smart home devices, interact with apps, and much more.
+You have exactly ONE tool: execute. This connects you to a powerful personal assistant (Claude Code) that can do anything -- send messages, search the web, manage lists, set reminders, create notes, research topics, control smart home devices, interact with apps, and much more.
 
 ALWAYS use execute when the user asks you to:
 - Send a message to someone (any platform: WhatsApp, Telegram, iMessage, Slack, etc.)
@@ -71,6 +63,11 @@ ALWAYS use execute when the user asks you to:
 - Remember or store any information for later
 
 Be detailed in your task description. Include all relevant context: names, content, platforms, quantities, etc. The assistant works better with complete information.
+
+VISUAL CONTEXT: Always begin the task field with a 1-2 sentence description of what you currently see through the camera, then describe the task. Use this format:
+"[Visual context: <what you see>] <task description>"
+Example: "[Visual context: User is in a supermarket looking at a shelf of cereals.] Add corn flakes to the shopping list."
+This lets the assistant understand the physical situation even though it cannot see the camera.
 
 NEVER pretend to do these things yourself.
 

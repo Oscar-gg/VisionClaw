@@ -21,17 +21,14 @@ object GeminiConfig {
     val apiKey: String
         get() = SettingsManager.geminiAPIKey
 
-    val openClawHost: String
-        get() = SettingsManager.openClawHost
+    val claudeCodeHost: String
+        get() = SettingsManager.claudeCodeHost
 
-    val openClawPort: Int
-        get() = SettingsManager.openClawPort
+    val claudeCodePort: Int
+        get() = SettingsManager.claudeCodePort
 
-    val openClawHookToken: String
-        get() = SettingsManager.openClawHookToken
-
-    val openClawGatewayToken: String
-        get() = SettingsManager.openClawGatewayToken
+    val claudeCodeToken: String
+        get() = SettingsManager.claudeCodeToken
 
     fun websocketURL(): String? {
         if (apiKey == "YOUR_GEMINI_API_KEY" || apiKey.isEmpty()) return null
@@ -41,8 +38,8 @@ object GeminiConfig {
     val isConfigured: Boolean
         get() = apiKey != "YOUR_GEMINI_API_KEY" && apiKey.isNotEmpty()
 
-    val isOpenClawConfigured: Boolean
-        get() = openClawGatewayToken != "YOUR_OPENCLAW_GATEWAY_TOKEN"
-                && openClawGatewayToken.isNotEmpty()
-                && openClawHost != "http://YOUR_MAC_HOSTNAME.local"
+    val isClaudeCodeConfigured: Boolean
+        get() = claudeCodeToken != "YOUR_CLAUDE_CODE_TOKEN"
+                && claudeCodeToken.isNotEmpty()
+                && claudeCodeHost != "http://YOUR_MAC_HOSTNAME.local"
 }

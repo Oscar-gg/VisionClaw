@@ -17,15 +17,17 @@ import org.json.JSONObject
 
 class OpenClawBridge {
     companion object {
-        private const val TAG = "OpenClawBridge"
-        private const val MAX_HISTORY_TURNS = 10
+        private const val TAG = "ClaudeBridge"
     }
 
     private val _lastToolCallStatus = MutableStateFlow<ToolCallStatus>(ToolCallStatus.Idle)
     val lastToolCallStatus: StateFlow<ToolCallStatus> = _lastToolCallStatus.asStateFlow()
 
-    private val _connectionState = MutableStateFlow<OpenClawConnectionState>(OpenClawConnectionState.NotConfigured)
-    val connectionState: StateFlow<OpenClawConnectionState> = _connectionState.asStateFlow()
+    private val _connectionState = MutableStateFlow<AgentConnectionState>(AgentConnectionState.NotConfigured)
+    val connectionState: StateFlow<AgentConnectionState> = _connectionState.asStateFlow()
+
+    // Persisted conversation ID — reused so Claude retains context across tool calls
+    private var conversationId: String? = null
 
     fun setToolCallStatus(status: ToolCallStatus) {
         _lastToolCallStatus.value = status
@@ -41,88 +43,90 @@ class OpenClawBridge {
         .connectTimeout(5, TimeUnit.SECONDS)
         .build()
 
-    private var sessionKey: String = "agent:main:glass"
-    private val conversationHistory = mutableListOf<JSONObject>()
+    private fun baseUrl() = "${GeminiConfig.claudeCodeHost}:${GeminiConfig.claudeCodePort}"
 
     suspend fun checkConnection() = withContext(Dispatchers.IO) {
-        if (!GeminiConfig.isOpenClawConfigured) {
-            _connectionState.value = OpenClawConnectionState.NotConfigured
+        if (!GeminiConfig.isClaudeCodeConfigured) {
+            _connectionState.value = AgentConnectionState.NotConfigured
             return@withContext
         }
-        _connectionState.value = OpenClawConnectionState.Checking
+        _connectionState.value = AgentConnectionState.Checking
 
-        val url = "${GeminiConfig.openClawHost}:${GeminiConfig.openClawPort}/v1/chat/completions"
         try {
             val request = Request.Builder()
-                .url(url)
+                .url("${baseUrl()}/health")
                 .get()
-                .addHeader("Authorization", "Bearer ${GeminiConfig.openClawGatewayToken}")
-                .addHeader("x-openclaw-message-channel", "glass")
+                .addHeader("Authorization", "Bearer ${GeminiConfig.claudeCodeToken}")
                 .build()
 
             val response = pingClient.newCall(request).execute()
             val code = response.code
             response.close()
 
-            if (code in 200..499) {
-                _connectionState.value = OpenClawConnectionState.Connected
-                Log.d(TAG, "Gateway reachable (HTTP $code)")
+            if (code in 200..299) {
+                _connectionState.value = AgentConnectionState.Connected
+                Log.d(TAG, "Bridge reachable (HTTP $code)")
             } else {
-                _connectionState.value = OpenClawConnectionState.Unreachable("Unexpected response")
+                _connectionState.value = AgentConnectionState.Unreachable("HTTP $code — is the new server running? (needs npm run dev)")
+                Log.w(TAG, "Bridge returned unexpected status: $code")
             }
         } catch (e: Exception) {
-            _connectionState.value = OpenClawConnectionState.Unreachable(e.message ?: "Unknown error")
-            Log.d(TAG, "Gateway unreachable: ${e.message}")
+            _connectionState.value = AgentConnectionState.Unreachable(e.message ?: "Unknown error")
+            Log.d(TAG, "Bridge unreachable: ${e.message}")
         }
     }
 
-    fun resetSession() {
-        conversationHistory.clear()
-        Log.d(TAG, "Session reset (key retained: $sessionKey)")
+    suspend fun resetSession() = withContext(Dispatchers.IO) {
+        if (!GeminiConfig.isClaudeCodeConfigured) return@withContext
+        try {
+            val body = JSONObject().apply {
+                conversationId?.let { put("conversation_id", it) }
+            }
+            val request = Request.Builder()
+                .url("${baseUrl()}/reset")
+                .post(body.toString().toRequestBody("application/json".toMediaType()))
+                .addHeader("Authorization", "Bearer ${GeminiConfig.claudeCodeToken}")
+                .build()
+            pingClient.newCall(request).execute().close()
+            conversationId = null
+            Log.d(TAG, "Session reset")
+        } catch (e: Exception) {
+            Log.d(TAG, "Reset failed (non-fatal): ${e.message}")
+        }
     }
 
-    suspend fun delegateTask(
-        task: String,
+    /**
+     * Send a message to Claude with optional image frames.
+     * Maintains conversation history via a persistent conversation_id.
+     *
+     * @param text The user's message / task description
+     * @param images Optional list of base64-encoded JPEG frames from the glasses camera
+     * @param toolName Used only for status reporting in the UI
+     */
+    suspend fun chat(
+        text: String,
+        images: List<String> = emptyList(),
         toolName: String = "execute"
     ): ToolResult = withContext(Dispatchers.IO) {
         _lastToolCallStatus.value = ToolCallStatus.Executing(toolName)
 
-        val url = "${GeminiConfig.openClawHost}:${GeminiConfig.openClawPort}/v1/chat/completions"
-
-        // Append user message
-        conversationHistory.add(JSONObject().apply {
-            put("role", "user")
-            put("content", task)
-        })
-
-        // Trim history
-        if (conversationHistory.size > MAX_HISTORY_TURNS * 2) {
-            val trimmed = conversationHistory.takeLast(MAX_HISTORY_TURNS * 2)
-            conversationHistory.clear()
-            conversationHistory.addAll(trimmed)
-        }
-
-        Log.d(TAG, "Sending ${conversationHistory.size} messages in conversation")
-
         try {
-            val messagesArray = JSONArray()
-            for (msg in conversationHistory) {
-                messagesArray.put(msg)
-            }
+            val url = "${baseUrl()}/chat"
+            Log.d(TAG, "POST $url | text=${text.take(80)} | images=${images.size} | convId=$conversationId")
 
             val body = JSONObject().apply {
-                put("model", "openclaw")
-                put("messages", messagesArray)
-                put("stream", false)
+                put("text", text)
+                conversationId?.let { put("conversation_id", it) }
+                if (images.isNotEmpty()) {
+                    put("images", JSONArray().apply { images.forEach { put(it) } })
+                }
             }
 
             val request = Request.Builder()
                 .url(url)
                 .post(body.toString().toRequestBody("application/json".toMediaType()))
-                .addHeader("Authorization", "Bearer ${GeminiConfig.openClawGatewayToken}")
+                .addHeader("Authorization", "Bearer ${GeminiConfig.claudeCodeToken}")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("x-openclaw-session-key", sessionKey)
-                .addHeader("x-openclaw-message-channel", "glass")
                 .build()
 
             val response = client.newCall(request).execute()
@@ -130,40 +134,38 @@ class OpenClawBridge {
             val statusCode = response.code
             response.close()
 
+            Log.d(TAG, "HTTP $statusCode | body=${responseBody.take(200)}")
+
             if (statusCode !in 200..299) {
-                Log.d(TAG, "Chat failed: HTTP $statusCode - ${responseBody.take(200)}")
+                Log.e(TAG, "Chat failed: HTTP $statusCode - ${responseBody.take(400)}")
                 _lastToolCallStatus.value = ToolCallStatus.Failed(toolName, "HTTP $statusCode")
-                return@withContext ToolResult.Failure("Agent returned HTTP $statusCode")
+                return@withContext ToolResult.Failure("Claude returned HTTP $statusCode")
             }
 
             val json = JSONObject(responseBody)
-            val choices = json.optJSONArray("choices")
-            val content = choices?.optJSONObject(0)
-                ?.optJSONObject("message")
-                ?.optString("content", "")
 
-            if (!content.isNullOrEmpty()) {
-                conversationHistory.add(JSONObject().apply {
-                    put("role", "assistant")
-                    put("content", content)
-                })
-                Log.d(TAG, "Agent result: ${content.take(200)}")
-                _lastToolCallStatus.value = ToolCallStatus.Completed(toolName)
-                return@withContext ToolResult.Success(content)
+            // Persist conversation ID for context continuity
+            val newConversationId = json.optString("conversation_id", "")
+            if (newConversationId.isNotEmpty()) {
+                conversationId = newConversationId
             }
 
-            conversationHistory.add(JSONObject().apply {
-                put("role", "assistant")
-                put("content", responseBody)
-            })
-            Log.d(TAG, "Agent raw: ${responseBody.take(200)}")
+            val resultText = json.optString("text", "")
+            val error = json.optString("error", "")
+
+            if (error.isNotEmpty()) {
+                Log.d(TAG, "Chat error: $error")
+                _lastToolCallStatus.value = ToolCallStatus.Failed(toolName, error)
+                return@withContext ToolResult.Failure(error)
+            }
+
+            Log.d(TAG, "Chat result: ${resultText.take(200)}")
             _lastToolCallStatus.value = ToolCallStatus.Completed(toolName)
-            return@withContext ToolResult.Success(responseBody)
+            return@withContext ToolResult.Success(resultText)
         } catch (e: Exception) {
-            Log.e(TAG, "Agent error: ${e.message}")
+            Log.e(TAG, "Chat exception: ${e.message}")
             _lastToolCallStatus.value = ToolCallStatus.Failed(toolName, e.message ?: "Unknown")
-            return@withContext ToolResult.Failure("Agent error: ${e.message}")
+            return@withContext ToolResult.Failure("Bridge error: ${e.message}")
         }
     }
-
 }

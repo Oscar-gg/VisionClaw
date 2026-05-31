@@ -90,13 +90,13 @@ sealed class ToolCallStatus {
         get() = this is Executing
 }
 
-// OpenClaw Connection State
+// Agent Connection State
 
-sealed class OpenClawConnectionState {
-    data object NotConfigured : OpenClawConnectionState()
-    data object Checking : OpenClawConnectionState()
-    data object Connected : OpenClawConnectionState()
-    data class Unreachable(val message: String) : OpenClawConnectionState()
+sealed class AgentConnectionState {
+    data object NotConfigured : AgentConnectionState()
+    data object Checking : AgentConnectionState()
+    data object Connected : AgentConnectionState()
+    data class Unreachable(val message: String) : AgentConnectionState()
 }
 
 // Tool Declarations (for Gemini setup message)
